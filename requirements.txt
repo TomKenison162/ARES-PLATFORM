@@ -1,0 +1,13 @@
+pandas
+scikit-learn 
+
+transformers
+torch 
+
+fastapi 
+
+uvicorn
+
+requests 
+
+newsdataio 
