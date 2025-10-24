@@ -1,4 +1,10 @@
-*.h5
-*.pt
 credentials.py
 .env
+__pycache__/
+generated_report.html
+
+data/
+*.csv
+
+demo/
+*.py

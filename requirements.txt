@@ -11,3 +11,5 @@ uvicorn
 requests 
 
 newsdataio 
+psycopg2-binary
+
