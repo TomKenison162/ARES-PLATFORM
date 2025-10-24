@@ -1,19 +1,9 @@
-pandas
-scikit-learn 
-
-transformers
-torch 
-
-fastapi 
-
-uvicorn
-
 requests 
 
-newsdataio 
+
 psycopg2-binary
 
-
+dotenv
 BeautifulSoup4
 bs4
 
