@@ -13,6 +13,7 @@ requests
 newsdataio 
 psycopg2-binary
 
-BeautifulSoup4
 
+BeautifulSoup4
+bs4
 
