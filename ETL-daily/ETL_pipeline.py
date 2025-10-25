@@ -6,33 +6,33 @@ from dotenv import load_dotenv
 import psycopg2  # For PostgreSQL
 import sys
 
-# Load environment variables
+# Load environment variables 
 load_dotenv()
-api_url= os.getenv('BASE_URL')
-api_key = os.getenv('API_KEY')
-db_url = os.getenv('DATABASE_URL') # Render will inject this
+BASE_URL = os.getenv('BASE_URL')
+API_KEY = os.getenv('API_KEY')
+DATABASE_URL = os.getenv('DATABASE_URL') 
 
-# --- Database Connection Function ---
+
 def get_db_connection():
-    if not db_url:
+    """Establishes and returns a new database connection."""
+    if not DATABASE_URL:
         print("Error: DATABASE_URL environment variable is not set.", file=sys.stderr)
         return None
-    
     try:
-        conn = psycopg2.connect(db_url)
+        conn = psycopg2.connect(DATABASE_URL)
         return conn
-    except Exception as e: # generic exception
+    except psycopg2.Error as e:
         print(f"Error: Unable to connect to the database: {e}", file=sys.stderr)
         return None
 
-# --- API and Scraping Functions (Unchanged) ---
-def classify_text(text, tier = "fast"):
-    url = f"{api_url}/v1/classify"
+
+def classify_text(text: str, tier: str = "fast"):
+    url = f"{BASE_URL}"
     headers = {"Content-Type": "application/json"}
-    if api_key: 
-        headers["Authorization"] = f"Bearer {api_key}"
+    if API_KEY: 
+        headers["Authorization"] = f"Bearer {API_KEY}"
     
-    data = {"text":text, "tier":tier}
+    data = {"text": text, "tier": tier}
     
     try:
         response = requests.post(url, headers=headers, json=data, timeout=20)
@@ -41,52 +41,38 @@ def classify_text(text, tier = "fast"):
         else:
             print(f"Error classifying text: {response.status_code} - {response.text}")
             return None
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         print(f"Error during classification request: {e}")
         return None
 
 def get_article_text(url):
+    """Fetches an article URL and scrapes its text content from <p> tags."""
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
     try:
-        response = requests.get(url, headers=headers, timeout = 10)
+        response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
             paragraphs = soup.find_all('p')
-            
-            # article_text = ' '.join([p.get_text() for p in paragraphs])
-            all_text = []
-            for p in paragraphs: # loop through all the <p> tags
-                all_text.append(p.get_text())
-            article_text = ' '.join(all_text)
-
-            article_text = ' '.join(article_text.split()) # this cleans up whitespace
+            article_text = ' '.join([p.get_text() for p in paragraphs])
+            article_text = ' '.join(article_text.split())
             return article_text
         else:
             print(f"Failed to retrieve article (Status code: {response.status_code}) for url: {url}")
             return None
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         print(f"Error during scraping {url}: {e}")
         return None
 
-# --- GDELT Query Setup ---
-sources = {
+
+us_major_sources = {
     'cnn.com', 'foxnews.com',
     'nytimes.com', 'washingtonpost.com', 'wsj.com',
     'politico.com', 'apnews.com', 'thehill.com'
 }
-
-# build the domain query part
-# domain_query = "(" + " OR ".join([f"domain:{source}" for source in sources]) + ")"
-domain_bits = []
-for s in sources:
-    domain_bits.append(f"domain:{s}")
-domain_query = "(" + " OR ".join(domain_bits) + ")"
-
-
+domain_query = "(" + " OR ".join([f"domain:{source}" for source in us_major_sources]) + ")"
 theme_query = "(theme:ACT_MAKESTATEMENT OR theme:ACT_HARMTHREATEN)"
-
 lang_query = "sourcelang:english"
 query = f"{domain_query} {theme_query} {lang_query}"
 
@@ -98,15 +84,15 @@ params = {
     "timespan": "1d",
     "maxrecords": 100
 }
-gdelt_url = "https://api.gdeltproject.org/api/v2/doc/doc"
+base_url = "https://api.gdeltproject.org/api/v2/doc/doc"
 
 print(f"Querying GDELT DOC API...")
 
-# --- Main Processing and Database Insertion Logic ---
-processed_count = 0
-inserted_count = 0
 
-# SQL query for inserting data
+articles_processed = 0
+articles_inserted = 0
+
+
 insert_query = """
     INSERT INTO public.articles (source_domain, title, url, scraped_text, classification_json)
     VALUES (%s, %s, %s, %s, %s)
@@ -118,12 +104,11 @@ conn = get_db_connection()
 cur = None
 
 if conn:
-    print("DB connected!")
     try:
         cur = conn.cursor()
         
         # Make the GDELT request
-        response = requests.get(gdelt_url, params=params)
+        response = requests.get(base_url, params=params)
         
         if response.status_code == 200 and response.text:
             try:
@@ -146,17 +131,15 @@ if conn:
                                 print(f"   > Skipping (scraping failed).")
                                 continue
                             
-                            class_res = classify_text(article_body, "fast")
-                            print(f"DEBUG: got classification: {class_res}") # debug print
+                            classification_result = classify_text(article_body, "fast")
+                            classification_json = json.dumps(classification_result)
                             
-                            class_json = json.dumps(class_res)
-                            
-                            data_tuple = (source, title, url, article_body, class_json)
+                            data_tuple = (source, title, url, article_body, classification_json)
                             cur.execute(insert_query, data_tuple)
                             
-                            processed_count += 1
+                            articles_processed += 1
                             if cur.rowcount > 0:
-                                inserted_count += 1
+                                articles_inserted += 1
                                 print(f"   > Source: {source} (Inserted)")
                             else:
                                 print(f"   > Source: {source} (Skipped as duplicate)")
@@ -167,23 +150,21 @@ if conn:
                             print(f"Error processing article {url}: {e}", file=sys.stderr)
                             pass
                     
-                    print("...loop done")
-                    # ok, now save changes
                     conn.commit()
                     
-                    print(f"\nSuccessfully processed {processed_count} articles.")
-                    print(f"Inserted {inserted_count} new articles into the database.")
+                    print(f"\nSuccessfully processed {articles_processed} articles.")
+                    print(f"Inserted {articles_inserted} new articles into the database.")
 
                 else:
                     print(f"No articles found matching criteria.")
             
-            except: # bare except
+            except json.JSONDecodeError:
                 print(f"Error: API returned non-JSON content.", file=sys.stderr)
         
         else:
             print(f"Error: GDELT API request failed (Status: {response.status_code})", file=sys.stderr)
 
-    except Exception as error: # changed from (Exception, psycopg2.Error)
+    except (Exception, psycopg2.Error) as error:
         print(f"A critical error occurred: {error}", file=sys.stderr)
         if conn:
             conn.rollback()
