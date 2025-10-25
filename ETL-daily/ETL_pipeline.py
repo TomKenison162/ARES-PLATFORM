@@ -27,7 +27,7 @@ def get_db_connection():
 
 
 def classify_text(text: str, tier: str = "fast"):
-    url = f"{BASE_URL}"
+    url = BASE_URL
     headers = {"Content-Type": "application/json"}
     if API_KEY: 
         headers["Authorization"] = f"Bearer {API_KEY}"
