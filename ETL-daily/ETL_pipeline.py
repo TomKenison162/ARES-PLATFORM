@@ -72,7 +72,7 @@ us_major_sources = {
     'politico.com', 'apnews.com', 'thehill.com'
 }
 domain_query = "(" + " OR ".join([f"domain:{source}" for source in us_major_sources]) + ")"
-theme_query = "(theme:ACT_MAKESTATEMENT OR theme:ACT_HARMTHREATEN)"
+theme_query = "(theme:ACT_APPEAL OR theme:ACT_HARMTHREATEN)"
 lang_query = "sourcelang:english"
 query = f"{domain_query} {theme_query} {lang_query}"
 
@@ -81,7 +81,7 @@ params = {
     "mode": "ArtList",
     "format": "json",
     "sort": "DateDesc",
-    "timespan": "1d",
+    "timespan": "10d",
     "maxrecords": 100
 }
 base_url = "https://api.gdeltproject.org/api/v2/doc/doc"
